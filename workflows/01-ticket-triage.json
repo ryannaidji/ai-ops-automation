@@ -1,0 +1,113 @@
+{
+  "name": "01 Ticket triage (webhook -> ai-service -> route)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ticket-in",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Ticket Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "ticket-in"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sign the event with HMAC-SHA256 so ai-service can verify it came from n8n.\n// Requires NODE_FUNCTION_ALLOW_BUILTIN=crypto (set in docker-compose.yml).\nconst crypto = require('crypto');\nconst secret = $env.WEBHOOK_SECRET;\nconst out = [];\nfor (const item of $input.all()) {\n  const b = item.json.body || item.json;\n  const event = {\n    ticket_id: String(b.ticket_id || ('n8n-' + Date.now())),\n    subject: b.subject || '',\n    body: b.body || '',\n    channel: b.channel || 'api'\n  };\n  const raw = JSON.stringify(event);\n  const ts = String(Math.floor(Date.now() / 1000));\n  const sig = 'sha256=' + crypto.createHmac('sha256', secret).update(ts + '.' + raw).digest('hex');\n  out.push({ json: { raw, ts, sig } });\n}\nreturn out;"
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Sign Event (HMAC)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AI_SERVICE_URL }}/webhook/ticket",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Timestamp", "value": "={{ $json.ts }}" },
+            { "name": "X-Signature", "value": "={{ $json.sig }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.raw }}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "ai-service: redact+classify+answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c0000000-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.classification.urgency }}",
+              "rightValue": "high",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "IF urgency = high",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTIFY_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: `:rotating_light: Escalated ticket ${$json.ticket_id} [${$json.classification.category}/${$json.classification.urgency}] ${$json.reason}\\n${$json.redacted_text.slice(0, 300)}` }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Notify on-call (Discord/Slack-style webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Connector: append the routed ticket (redacted text only) to a local CSV.\n// Requires NODE_FUNCTION_ALLOW_BUILTIN=fs and the /files volume (docker-compose.yml).\nconst fs = require('fs');\nconst path = '/files/tickets.csv';\nconst esc = v => '\"' + String(v ?? '').replace(/\"/g, '\"\"').replace(/\\r?\\n/g, ' ') + '\"';\nif (!fs.existsSync(path)) {\n  fs.writeFileSync(path, 'ticket_id,route,category,urgency,sentiment,reason,redacted_text,suggested_reply\\n');\n}\nfor (const item of $input.all()) {\n  const t = item.json;\n  const c = t.classification || {};\n  fs.appendFileSync(path, [t.ticket_id, t.route, c.category, c.urgency, c.sentiment, t.reason, t.redacted_text, t.suggested_reply].map(esc).join(',') + '\\n');\n}\nreturn $input.all();"
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Append to CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 420]
+    }
+  ],
+  "connections": {
+    "Ticket Webhook": { "main": [[{ "node": "Sign Event (HMAC)", "type": "main", "index": 0 }]] },
+    "Sign Event (HMAC)": { "main": [[{ "node": "ai-service: redact+classify+answer", "type": "main", "index": 0 }]] },
+    "ai-service: redact+classify+answer": { "main": [[{ "node": "IF urgency = high", "type": "main", "index": 0 }]] },
+    "IF urgency = high": {
+      "main": [
+        [{ "node": "Notify on-call (Discord/Slack-style webhook)", "type": "main", "index": 0 }],
+        [{ "node": "Append to CSV", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "active": false
+}

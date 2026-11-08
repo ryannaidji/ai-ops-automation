@@ -1,0 +1,65 @@
+{
+  "name": "02 Daily ticket digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "days", "triggerAtHour": 8 }] }
+      },
+      "id": "b1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Every day 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.AI_SERVICE_URL }}/tickets/digest",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "since", "value": "={{ $now.minus({ days: 1 }).toUTC().toISO({ suppressMilliseconds: true, includeOffset: true }).replace('Z', '+00:00') }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1b2c3d4-0002-4000-8000-000000000002",
+      "name": "ai-service: GET /tickets/digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst fmt = o => Object.entries(o || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || 'none';\nconst esc = (d.escalated || []).map(e => `- ${e.ticket_id} (${e.reason})`).join('\\n') || '- none';\nconst content = `**Daily ticket digest** (last 24h)\\nTotal: ${d.total}\\nBy route: ${fmt(d.by_route)}\\nBy category: ${fmt(d.by_category)}\\nBy urgency: ${fmt(d.by_urgency)}\\nEscalated:\\n${esc}`;\nreturn [{ json: { content } }];"
+      },
+      "id": "b1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Format digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTIFY_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.content }) }}",
+        "options": {}
+      },
+      "id": "b1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Post digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Every day 08:00": { "main": [[{ "node": "ai-service: GET /tickets/digest", "type": "main", "index": 0 }]] },
+    "ai-service: GET /tickets/digest": { "main": [[{ "node": "Format digest", "type": "main", "index": 0 }]] },
+    "Format digest": { "main": [[{ "node": "Post digest", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "active": false
+}

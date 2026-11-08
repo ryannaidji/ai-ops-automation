@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Ops Triage</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header><h1>AI Ops Triage</h1><span id="status"></span></header>
+    <main>
+      <section class="card">
+        <h2>Submit a test ticket</h2>
+        <form id="ticket-form">
+          <input name="subject" placeholder="Subject" maxlength="500" />
+          <textarea name="body" placeholder="Ticket body (PII will be redacted before anything is stored)" required rows="4"></textarea>
+          <button type="submit">Send</button>
+        </form>
+        <p class="hint">The browser signs the event with the dev secret (VITE_WEBHOOK_SECRET). Demo only: in production, n8n or a backend signs it.</p>
+        <pre id="result"></pre>
+      </section>
+      <section class="card">
+        <h2>Processed tickets <button id="refresh" type="button">Refresh</button></h2>
+        <table>
+          <thead><tr><th>Ticket</th><th>Route</th><th>Category</th><th>Urgency</th><th>Sentiment</th><th>Redacted text</th><th>Created</th></tr></thead>
+          <tbody id="tickets"></tbody>
+        </table>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

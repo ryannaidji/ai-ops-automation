@@ -1,0 +1,50 @@
+# Self-hosted stack: n8n + ai-service + mock receiver. Ollama runs on the HOST.
+#   ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+#   docker compose up --build
+services:
+  ai-service:
+    build: ./services/ai-service
+    environment:
+      LLM_BASE_URL: http://host.docker.internal:11434/v1
+      LLM_MODEL: qwen2.5:3b
+      EMBED_MODEL: nomic-embed-text
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-secret-change-me}
+      DOCS_DIR: /app/docs
+      DB_PATH: /app/data/tickets.db
+    volumes:
+      - ./docs:/app/docs:ro
+      - ai_data:/app/data
+    ports: ["8000:8000"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+
+  mock-receiver:
+    image: python:3.11-slim
+    command: python /srv/server.py 9000
+    environment:
+      MOCK_OUT: /data/mock_received.jsonl
+    volumes:
+      - ./mock-receiver:/srv:ro
+      - mock_data:/data
+    ports: ["9000:9000"]
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.88.0
+    environment:
+      GENERIC_TIMEZONE: America/New_York
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto,fs
+      AI_SERVICE_URL: http://ai-service:8000
+      NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-http://mock-receiver:9000/notify}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-secret-change-me}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./data/n8n-files:/files
+    ports: ["5678:5678"]
+    depends_on: [ai-service, mock-receiver]
+
+volumes:
+  ai_data:
+  mock_data:
+  n8n_data:

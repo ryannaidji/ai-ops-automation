@@ -1,0 +1,10 @@
+{
+  "category_accuracy": 0.0,
+  "category_macro_f1": 0.0,
+  "urgency_accuracy": 0.0,
+  "pii_recall": 0.0,
+  "pii_precision": 0.0,
+  "rag_fact_hit": 0.0,
+  "rag_source_hit": 0.0,
+  "rag_lexical_groundedness": 0.0
+}
