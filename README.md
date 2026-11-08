@@ -102,15 +102,25 @@ python evals/generate.py && python evals/run_eval.py              # all 40
 python evals/run_eval.py --limit 12 --thresholds evals/thresholds-ci.json
 ```
 
-| Metric | Value |
-|---|---|
-| Category accuracy / macro-F1 | TBD |
-| Urgency accuracy / macro-F1 | TBD |
-| PII redaction recall / precision | TBD |
-| RAG fact hit / source hit / lexical groundedness | TBD |
-| `/webhook/ticket` latency p50 / p95 (local CPU/GPU, qwen2.5:3b) | TBD |
+Measured on a free GitHub-hosted runner (4 vCPU, CPU only), `qwen2.5:3b` + `nomic-embed-text` via Ollama,
+40 tickets, workflow [`eval-full.yml`](.github/workflows/eval-full.yml). Raw per-ticket results in `evals/results/`.
 
-CI (`.github/workflows/ci.yml`) runs pytest, the TS build and vitest, and an eval job that installs Ollama on the runner, pulls both models and gates on `evals/thresholds-ci.json`. Those thresholds are placeholders (0.0) until a baseline is measured.
+| Metric | Classify prompt v1 | **Classify prompt v2** |
+|---|---|---|
+| Category accuracy / macro-F1 | 0.875 / 0.805 | 0.875 / **0.898** |
+| **Urgency accuracy / macro-F1** | 0.300 / 0.284 | **0.825 / 0.806** |
+| PII redaction recall / precision | 1.00 / 1.00 | 1.00 / 1.00 |
+| RAG fact hit / source hit / lexical groundedness | 0.741 / 1.00 / 0.782 | 0.741 / 1.00 / 0.782 |
+| `/webhook/ticket` latency p50 / p95 | 14.0 s / 30.5 s | 28.5 s / 37.1 s |
+
+**What the eval caught.** With prompt v1 the model escalated urgency by one level almost every time (low→medium 11×,
+medium→high 13×; even "the new dashboard is fantastic" became *high*): accuracy 0.30, no better than chance.
+Prompt v2 (`services/ai-service/app/classify.py`) states ordered rules ("high ONLY IF an outage, security/fraud or a
+legal deadline is explicitly stated; one customer's problem is not high; when unsure choose the lower level") plus four
+few-shot examples written separately from the eval tickets. Trade-off: the longer prompt roughly doubles p50 latency on
+this CPU runner (single runs, runner variance included). `CLASSIFY_PROMPT=v1|v2` switches versions.
+
+CI (`.github/workflows/ci.yml`) runs pytest, the TS build and vitest, and an eval job that installs Ollama on the runner, pulls both models and gates on `evals/thresholds-ci.json`. Thresholds are set below the v2 results with a margin (PII redaction must stay perfect).
 
 ## Limitations
 
