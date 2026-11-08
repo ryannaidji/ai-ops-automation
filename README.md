@@ -2,6 +2,11 @@
 
 AI-powered support-ticket triage that runs entirely on free, local, open-source tools: a reusable **FastAPI AI service** (PII redaction, classification, **LlamaIndex** RAG), **n8n** workflows that call it through **signed webhooks**, a typed **TypeScript** dashboard, and an eval harness. No paid APIs and no cloud: the LLM is **Ollama** (`qwen2.5:3b` + `nomic-embed-text`) through its OpenAI-compatible endpoint.
 
+
+![Dashboard: a signed ticket goes through redaction, classification and routing (qwen2.5:3b, local)](docs/img/demo.png)
+
+*Real run: all four PII items are redacted and the category is right, but urgency is `high` where the v2 rules say `medium` (one customer, one wrong charge) — one of the 17.5% urgency errors the eval reports.*
+
 ## Architecture
 
 ```mermaid
